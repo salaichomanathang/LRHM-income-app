@@ -92,7 +92,6 @@
                 try { return JSON.parse(localStorage.getItem('receiverHistory')) || []; } catch { return []; }
             });
 
-            // Added 'remark' to the form state
             const initialFormState = {
                 group: '', village: '', contributorName: '', phone: '+60', amount: '', 
                 reason: localStorage.getItem('savedReason') || '', 
@@ -184,7 +183,6 @@
                 }
                 const recordId = editingId || Date.now().toString();
                 
-                // Date formatting in English (DD/MM/YYYY)
                 const d = new Date();
                 const engDateString = `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth()+1).toString().padStart(2, '0')}/${d.getFullYear()}`;
                 const recordData = { ...formData, date: engDateString };
@@ -219,6 +217,13 @@
                     remark: record.remark || ''
                 });
                 setEditingId(record.id); setErrorMsg(''); window.scrollTo({ top: 0, behavior: 'smooth' });
+            };
+
+            // Convert Burmese numbers to English numbers automatically
+            const formatEngDate = (dateStr) => {
+                if(!dateStr) return '';
+                const mmNums = {'၀':'0','၁':'1','၂':'2','၃':'3','၄':'4','၅':'5','၆':'6','၇':'7','၈':'8','၉':'9'};
+                return dateStr.replace(/[၀-၉]/g, match => mmNums[match]);
             };
 
             const filteredRecords = useMemo(() => {
@@ -342,13 +347,10 @@
                                             <input type="text" name="receiverName" list="receivers-list" value={formData.receiverName} onChange={handleInputChange} placeholder="လက်ခံသူ..." className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white" />
                                             <datalist id="receivers-list">{receiverHistory.map((r, i) => <option key={i} value={r} />)}</datalist>
                                         </div>
-                                        
-                                        {/* Added Remark Field */}
                                         <div className="space-y-1">
                                             <label className="text-sm font-medium text-gray-700">Remark (မှတ်ချက်)</label>
                                             <textarea name="remark" value={formData.remark} onChange={handleInputChange} placeholder="မှတ်ချက် ရေးရန်..." className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white resize-none" rows="2"></textarea>
                                         </div>
-
                                         <div className="pt-2 flex flex-col gap-2">
                                             <button type="submit" className={`w-full text-white font-medium py-2.5 rounded-lg transition shadow-sm flex justify-center items-center ${editingId ? 'bg-orange-500' : 'bg-blue-600'}`}>
                                                 {editingId ? <><i className="fas fa-edit mr-2"></i> ပြင်ဆင်မည်</> : <><i className="fas fa-plus-circle mr-2"></i> စာရင်းသွင်းမည်</>}
@@ -386,13 +388,12 @@
                                             </div>
                                         ) : (
                                             <>
-                                                {/* Mobile Card Layout (Visible only on small screens) */}
                                                 <div className="block md:hidden space-y-3">
                                                     {filteredRecords.map(record => (
                                                         <div key={record.id} className={`bg-white p-4 rounded-xl shadow-sm border border-gray-100 ${editingId === record.id ? 'border-orange-300 bg-orange-50' : ''}`}>
                                                             <div className="flex justify-between items-start mb-2">
                                                                 <div className="font-bold text-gray-900 text-lg">{record.contributorName}</div>
-                                                                <div className="text-xs text-gray-500 font-medium bg-gray-100 px-2 py-1 rounded">{record.date}</div>
+                                                                <div className="text-xs text-gray-500 font-medium bg-gray-100 px-2 py-1 rounded">{formatEngDate(record.date)}</div>
                                                             </div>
                                                             <div className="text-sm text-gray-600 mb-1"><i className="fas fa-map-marker-alt text-gray-400 w-4"></i> {record.village} ({record.group})</div>
                                                             <div className="text-lg font-bold text-green-600 mb-2"><i className="fas fa-money-bill-wave text-green-500 w-4"></i> RM {parseFloat(record.amount).toLocaleString()}</div>
@@ -417,7 +418,6 @@
                                                     ))}
                                                 </div>
 
-                                                {/* Desktop Table Layout (Visible only on medium screens and up) */}
                                                 <div className="hidden md:block w-full overflow-x-auto">
                                                     <table className="w-full text-left border-collapse min-w-[600px]">
                                                         <thead className="bg-gray-100/50 text-gray-600 text-sm">
@@ -433,7 +433,7 @@
                                                         <tbody className="divide-y divide-gray-100 text-sm">
                                                             {filteredRecords.map(record => (
                                                                 <tr key={record.id} className={`hover:bg-blue-50/30 transition ${editingId === record.id ? 'bg-orange-50' : ''}`}>
-                                                                    <td className="p-3 text-gray-500 whitespace-nowrap">{record.date}</td>
+                                                                    <td className="p-3 text-gray-500 whitespace-nowrap">{formatEngDate(record.date)}</td>
                                                                     <td className="p-3 font-medium text-gray-900">{record.contributorName}</td>
                                                                     <td className="p-3 text-gray-700">{record.village}</td>
                                                                     <td className="p-3 text-right font-bold text-green-600 whitespace-nowrap">RM {parseFloat(record.amount).toLocaleString()}</td>
