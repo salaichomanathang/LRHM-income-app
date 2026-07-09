@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>LRHM ဝင်ငွေစာရင်း APP</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+</head>
+<body class="bg-gray-50 text-gray-800 font-sans antialiased">
+    
+    <div id="error-box" style="display: none; padding: 20px; background: #fee2e2; color: #991b1b; margin: 20px; border-radius: 8px; border: 1px solid #ef4444;"></div>
+    <div id="root"></div>
+
+    <script>
+        window.addEventListener('error', function(e) {
+            document.getElementById('error-box').style.display = 'block';
+            document.getElementById('error-box').innerHTML += '<p><strong>System Error:</strong> ' + e.message + '</p>';
+        });
+    </script>
+
+    <script type="text/babel">
+        const firebaseConfig = {
+            apiKey: "AIzaSyCx68R7kmEio61iengD3d6YcvuNefcxVrE",
+            authDomain: "lrhm-income-app.firebaseapp.com",
+            projectId: "lrhm-income-app",
+            storageBucket: "lrhm-income-app.firebasestorage.app",
+            messagingSenderId: "933757814400",
+            appId: "1:933757814400:web:de47ddeb5d10dde78e0865",
+            measurementId: "G-XBK3YY6SMH"
+        };
+
+        const { useState, useEffect, useMemo } = React;
+        
+        // Initialize Firebase
+        if (!firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
+        }
+        const db = firebase.firestore();
+
+        // ဤနေရာတွင် ကန့်သာရုံ ရွာအမည်ကို ထပ်တိုးထားပါသည်
+        const locationData = {
+            "Kantthayung (ကန့်သာရုံ)": [
+                "Kantthayung (ကန့်သာရုံ)", "Solong(ဆော်လောင်း)", "Yelongpang (ရယ်လောင်းပန်း)", "Kanlong (ကန်းလောင်း)", "Paikon (ပါကွင်း)", "Lungmong (လုန်မောင်)", "6 Miles (၆မိုင်)"
+            ],
+            "Ngonglong (ငုံလောင်း)": [
+                "Ngonglong (ငုံလောင်း)", "Anpum(အမ်ပုံ)", "Kyodo(ကျိုတော်)", "Apyeng (အပြိုင်း)", "Cho lakmän(ချင်းလက် မွန်)"
+            ],
+            "Khido (ခိတော်)": [
+                "Khido (ခိတော်)", "Cangm'cai(စမ္မသား)", "Cang-imnu(စံအိမ်နူး)", "M'Citui(မစီတွီး)", "Khuabang(ခါပန်း)"
+            ],
+            "M'Kya (မကြား)": [
+                "M'Kya (မကြား)", "Sekcung(ဆဲစုမ်)", "Lungbok(လုံဘောက်)", "Pakkyang (ပတ်ကြံ)", "M'Dilong(မဒီလောင်း)", "Kyawktong(ကျောက်တောင်)", "Thang-om(ထန်းအွမ်)"
+            ],
+            "Tungnge (တုံငယ်)": [
+                "Tungnge (တုံငယ်)", "Hlalongpang (လှလောင်းပန်း)"
+            ]
+        };
+
+        function App() {
+            const [appRole, setAppRole] = useState(null); 
+            const [loginPasscode, setLoginPasscode] = useState('');
+            const [loginError, setLoginError] = useState('');
+            
+            const [appPasswords, setAppPasswords] = useState({ admin: 'admin123', user: 'user123' });
+            
+            const [showPassModal, setShowPassModal] = useState(false);
+            const [newAdminPass, setNewAdminPass] = useState('');
+            const [newUserPass, setNewUserPass] = useState('');
+            const [passChangeSuccess, setPassChangeSuccess] = useState(false);
+
+            const [records, setRecords] = useState([]);
+            const [editingId, setEditingId] = useState(null);
+            const [viewingRecord, setViewingRecord] = useState(null);
+            const [errorMsg, setErrorMsg] = useState('');
+            const [copySuccess, setCopySuccess] = useState(false);
+
+            const [filterGroup, setFilterGroup] = useState('');
+            const [filterVillage, setFilterVillage] = useState('');
+            
+            const [reasonHistory, setReasonHistory] = useState(() => {
+                try { return JSON.parse(localStorage.getItem('reasonHistory')) || []; } catch { return []; }
+            });
+            const [receiverHistory, setReceiverHistory] = useState(() => {
+                try { return JSON.parse(localStorage.getItem('receiverHistory')) || []; } catch { return []; }
+            });
+
+            const initialFormState = {
+                group: '', village: '', contributorName: '', phone: '+60', amount: '', 
+                reason: localStorage.getItem('savedReason') || '', 
+                receiverName: localStorage.getItem('savedReceiverName') || '' 
+            };
+            const [formData, setFormData] = useState(initialFormState);
+
+            useEffect(() => {
+                const passRef = db.collection('settings').doc('passwords');
+                const unsubscribe = passRef.onSnapshot((docSnap) => {
+                    if (docSnap.exists) {
+                        setAppPasswords(docSnap.data());
+                    } else {
+                        passRef.set(appPasswords); 
+                    }
+                });
+                return () => unsubscribe();
+            }, []);
+
+            useEffect(() => {
+                if (!appRole) return; 
+                const recordsRef = db.collection('income_records');
+                const unsubscribe = recordsRef.onSnapshot((snapshot) => {
+                    const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    data.sort((a, b) => b.id.localeCompare(a.id)); 
+                    setRecords(data);
+                }, (error) => {
+                    console.error("Error fetching data:", error);
+                    setErrorMsg("ဒေတာရယူရာတွင် အခက်အခဲရှိနေပါသည်။");
+                });
+                return () => unsubscribe();
+            }, [appRole]);
+
+            const handleLogin = (e) => {
+                e.preventDefault();
+                if (loginPasscode === appPasswords.admin) { setAppRole('admin'); setLoginError(''); }
+                else if (loginPasscode === appPasswords.user) { setAppRole('user'); setLoginError(''); }
+                else { setLoginError('စကားဝှက် မှားယွင်းနေပါသည်။ (Incorrect Password)'); }
+            };
+
+            const handleLogout = () => { setAppRole(null); setLoginPasscode(''); setShowPassModal(false); };
+
+            const handleCopyLink = async () => {
+                const currentUrl = window.location.href.split('#')[0];
+                if (navigator.share) {
+                    try { await navigator.share({ title: 'LRHM ဝင်ငွေစာရင်း APP', url: currentUrl }); return; } 
+                    catch (err) { console.log('မျှဝေခြင်း မအောင်မြင်ပါ', err); }
+                }
+                try {
+                    await navigator.clipboard.writeText(currentUrl);
+                } catch(err) {
+                    const el = document.createElement('textarea');
+                    el.value = currentUrl; document.body.appendChild(el); el.select(); document.execCommand('copy'); document.body.removeChild(el);
+                }
+                setCopySuccess(true); setTimeout(() => setCopySuccess(false), 3000);
+            };
+
+            const openPassModal = () => {
+                setNewAdminPass(appPasswords.admin); setNewUserPass(appPasswords.user);
+                setShowPassModal(true); setPassChangeSuccess(false);
+            };
+
+            const handleSavePasswords = async (e) => {
+                e.preventDefault();
+                if (!newAdminPass || !newUserPass) return;
+                try {
+                    await db.collection('settings').doc('passwords').set({ admin: newAdminPass, user: newUserPass });
+                    setPassChangeSuccess(true); setTimeout(() => setShowPassModal(false), 2000);
+                } catch (err) { console.error(err); }
+            };
+
+            const handleInputChange = (e) => {
+                const { name, value } = e.target;
+                if (name === 'phone') setFormData(prev => ({ ...prev, [name]: value.replace(/[^0-9+]/g, '') }));
+                else setFormData(prev => ({ ...prev, [name]: value }));
+                setErrorMsg('');
+            };
+
+            const handleGroupChange = (e) => {
+                setFormData(prev => ({ ...prev, group: e.target.value, village: '' }));
+                setErrorMsg('');
+            };
+
+            const handleSubmit = async (e) => {
+                e.preventDefault();
+                if (!formData.group || !formData.village || !formData.contributorName || !formData.phone || !formData.amount) {
+                    setErrorMsg('ကျေးဇူးပြု၍ မရှိမဖြစ်လိုအပ်သော အချက်အလက်များကို ဖြည့်စွက်ပါ။'); return;
+                }
+                const recordId = editingId || Date.now().toString();
+                const recordData = { ...formData, date: new Date().toLocaleDateString('my-MM') };
+
+                try {
+                    await db.collection('income_records').doc(recordId).set(recordData, { merge: true });
+                    setEditingId(null);
+                    
+                    if (formData.reason && !reasonHistory.includes(formData.reason)) {
+                        const updated = [...reasonHistory, formData.reason];
+                        setReasonHistory(updated); localStorage.setItem('reasonHistory', JSON.stringify(updated));
+                    }
+                    if (formData.receiverName && !receiverHistory.includes(formData.receiverName)) {
+                        const updated = [...receiverHistory, formData.receiverName];
+                        setReceiverHistory(updated); localStorage.setItem('receiverHistory', JSON.stringify(updated));
+                    }
+                    localStorage.setItem('savedReason', formData.reason);
+                    localStorage.setItem('savedReceiverName', formData.receiverName);
+
+                    setFormData({ ...initialFormState, reason: formData.reason, receiverName: formData.receiverName });
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                } catch (err) {
+                    setErrorMsg("ဒေတာသိမ်းဆည်းရာတွင် အခက်အခဲရှိနေပါသည်။");
+                }
+            };
+
+            const handleEdit = (record) => {
+                if (appRole !== 'admin') return;
+                setFormData({
+                    group: record.group, village: record.village, contributorName: record.contributorName,
+                    phone: record.phone || '+60', amount: record.amount, reason: record.reason || '', receiverName: record.receiverName || ''
+                });
+                setEditingId(record.id); setErrorMsg(''); window.scrollTo({ top: 0, behavior: 'smooth' });
+            };
+
+            const filteredRecords = useMemo(() => {
+                return records.filter(record => {
+                    const matchGroup = filterGroup ? record.group === filterGroup : true;
+                    const matchVillage = filterVillage ? record.village === filterVillage : true;
+                    return matchGroup && matchVillage;
+                });
+            }, [records, filterGroup, filterVillage]);
+
+            const totalAmount = useMemo(() => filteredRecords.reduce((sum, record) => sum + (parseFloat(record.amount) || 0), 0), [filteredRecords]);
+
+            if (!appRole) {
+                return (
+                    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
+                        <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-8 border border-gray-100 text-center">
+                            <div className="bg-blue-100 p-4 rounded-full inline-flex items-center justify-center mb-4">
+                                <i className="fas fa-lock text-blue-600 text-3xl"></i>
+                            </div>
+                            <h1 className="text-2xl font-bold text-gray-900 mb-2">LRHM ဝင်ငွေစာရင်း APP</h1>
+                            <p className="text-gray-500 mb-8 text-sm">လုံခြုံရေးအကောင့်ဝင်ရန် စကားဝှက် ရိုက်ထည့်ပါ</p>
+                            <form onSubmit={handleLogin} className="space-y-4">
+                                <input type="password" value={loginPasscode} onChange={(e) => { setLoginPasscode(e.target.value); setLoginError(''); }} placeholder="Password (စကားဝှက်)" className="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-center text-lg tracking-widest"/>
+                                {loginError && <div className="text-red-500 text-sm font-medium">{loginError}</div>}
+                                <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 rounded-xl transition shadow-sm">အကောင့်ဝင်မည် (Login)</button>
+                            </form>
+                        </div>
+                    </div>
+                );
+            }
+
+            return (
+                <div className="min-h-screen bg-gray-50 p-2 md:p-6 lg:p-8">
+                    <div className="max-w-6xl mx-auto space-y-4 md:space-y-6">
+                        <header className="bg-white rounded-2xl shadow-sm p-4 md:p-6 border border-gray-100">
+                            <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+                                <div className="flex items-center space-x-3 w-full md:w-auto">
+                                    <div className="bg-blue-600 p-3 rounded-lg text-white"><i className="fas fa-chart-line text-xl"></i></div>
+                                    <div className="flex-1">
+                                        <h1 className="text-xl md:text-2xl font-bold text-gray-900">LRHM ဝင်ငွေစာရင်း APP</h1>
+                                        <p className="text-xs md:text-sm font-medium text-blue-600 mt-1">{appRole === 'admin' ? '👑 စီမံခန့်ခွဲသူ (Admin Mode)' : '👤 အသုံးပြုသူ (User Mode)'}</p>
+                                    </div>
+                                </div>
+                                <div className="flex items-center flex-wrap gap-2 w-full md:w-auto justify-end">
+                                    <button onClick={handleCopyLink} className="flex items-center px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm rounded-lg transition">
+                                        <i className="fas fa-link mr-1.5"></i> {copySuccess ? 'လင့်ခ် ကူးပြီးပါပြီ' : 'လင့်ခ် ကူးမည်'}
+                                    </button>
+                                    {appRole === 'admin' && (
+                                        <button onClick={openPassModal} className="flex items-center px-3 py-2 bg-orange-100 hover:bg-orange-200 text-orange-700 text-sm rounded-lg transition">
+                                            <i className="fas fa-key mr-1.5"></i> စကားဝှက် ပြောင်းရန်
+                                        </button>
+                                    )}
+                                    <button onClick={handleLogout} className="flex items-center px-3 py-2 bg-red-100 hover:bg-red-200 text-red-700 text-sm rounded-lg transition">
+                                        <i className="fas fa-sign-out-alt mr-1.5"></i> ထွက်မည်
+                                    </button>
+                                </div>
+                            </div>
+                            <div className="mt-4 pt-4 border-t border-gray-100 flex flex-col md:flex-row justify-between items-center bg-green-50 p-4 rounded-xl">
+                                <p className="text-sm text-gray-600 font-medium mb-1 md:mb-0">လက်ရှိပြသနေသော စုစုပေါင်းဝင်ငွေ</p>
+                                <p className="text-2xl md:text-3xl font-bold text-green-600">RM {totalAmount.toLocaleString()}</p>
+                            </div>
+                        </header>
+
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                            <div className="lg:col-span-1">
+                                <div className="bg-white rounded-2xl shadow-sm p-4 md:p-5 border border-gray-100 sticky top-6">
+                                    <h2 className="text-lg font-semibold mb-4 flex items-center border-b pb-3">
+                                        {editingId ? <><i className="fas fa-edit mr-2 text-orange-500"></i> စာရင်း ပြင်ဆင်ရန်</> : <><i className="fas fa-plus-circle mr-2 text-blue-600"></i> စာရင်းအသစ် ထည့်ရန်</>}
+                                    </h2>
+                                    {errorMsg && <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm mb-4 border border-red-100">{errorMsg}</div>}
+
+                                    <form onSubmit={handleSubmit} className="space-y-3 w-full max-w-sm mx-auto">
+                                        <div className="space-y-1">
+                                            <label className="text-sm font-medium text-gray-700">Zone (အုပ်စု) *</label>
+                                            <select name="group" value={formData.group} onChange={handleGroupChange} className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white">
+                                                <option value="">Zone ရွေးချယ်ပါ</option>
+                                                {Object.keys(locationData).map(g => <option key={g} value={g}>{g}</option>)}
+                                            </select>
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-sm font-medium text-gray-700">Village (ကျေးရွာ) *</label>
+                                            <select name="village" value={formData.village} onChange={handleInputChange} disabled={!formData.group} className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-gray-100 bg-white">
+                                                <option value="">Village ရွေးချယ်ပါ</option>
+                                                {formData.group && locationData[formData.group].map(v => <option key={v} value={v}>{v}</option>)}
+                                            </select>
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-sm font-medium text-gray-700">Name (ထည့်ဝင်သူ အမည်) *</label>
+                                            <input type="text" name="contributorName" value={formData.contributorName} onChange={handleInputChange} placeholder="အမည်" className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-sm font-medium text-gray-700">Phone (ဖုန်း နံပါတ်) *</label>
+                                            <input type="tel" name="phone" value={formData.phone} onChange={handleInputChange} placeholder="+60..." className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-sm font-medium text-gray-700">Amount (ပမာဏ) *</label>
+                                            <input type="number" name="amount" value={formData.amount} onChange={handleInputChange} placeholder="ငွေပမာဏ" min="0" className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-sm font-medium text-gray-700">Reason (ငွေပေးရခြင်းအကြောင်းရင်း)</label>
+                                            <input type="text" name="reason" list="reasons-list" value={formData.reason} onChange={handleInputChange} placeholder="အကြောင်းရင်း..." className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white" />
+                                            <datalist id="reasons-list">{reasonHistory.map((r, i) => <option key={i} value={r} />)}</datalist>
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-sm font-medium text-gray-700">Receiver (လက်ခံသူ အမည်)</label>
+                                            <input type="text" name="receiverName" list="receivers-list" value={formData.receiverName} onChange={handleInputChange} placeholder="လက်ခံသူ..." className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white" />
+                                            <datalist id="receivers-list">{receiverHistory.map((r, i) => <option key={i} value={r} />)}</datalist>
+                                        </div>
+                                        <div className="pt-2 flex flex-col gap-2">
+                                            <button type="submit" className={`w-full text-white font-medium py-2.5 rounded-lg transition shadow-sm flex justify-center items-center ${editingId ? 'bg-orange-500' : 'bg-blue-600'}`}>
+                                                {editingId ? <><i className="fas fa-edit mr-2"></i> ပြင်ဆင်မည်</> : <><i className="fas fa-plus-circle mr-2"></i> စာရင်းသွင်းမည်</>}
+                                            </button>
+                                            {editingId && (
+                                                <button type="button" onClick={() => {setEditingId(null); setFormData(initialFormState);}} className="w-full bg-gray-100 text-gray-700 font-medium py-2.5 rounded-lg flex justify-center items-center">
+                                                    <i className="fas fa-times mr-2"></i> မပြင်ဆင်တော့ပါ
+                                                </button>
+                                            )}
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+
+                            <div className="lg:col-span-2">
+                                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden h-full flex flex-col">
+                                    <div className="p-4 border-b border-gray-100 flex flex-col gap-3">
+                                        <h2 className="text-lg font-semibold flex items-center"><i className="fas fa-list-alt mr-2 text-blue-600"></i> မှတ်တမ်းများ ({filteredRecords.length})</h2>
+                                        <div className="bg-gray-50 p-2 rounded-xl border border-gray-200 flex flex-col sm:flex-row gap-2">
+                                            <select value={filterGroup} onChange={(e)=>{setFilterGroup(e.target.value); setFilterVillage('');}} className="flex-1 p-2 text-sm border border-gray-300 rounded-lg outline-none bg-white">
+                                                <option value="">Zone အားလုံး ပြမည်</option>
+                                                {Object.keys(locationData).map(g => <option key={g} value={g}>{g}</option>)}
+                                            </select>
+                                            <select value={filterVillage} onChange={(e) => setFilterVillage(e.target.value)} disabled={!filterGroup} className="flex-1 p-2 text-sm border border-gray-300 rounded-lg outline-none disabled:bg-gray-200 bg-white">
+                                                <option value="">Village အားလုံး ပြမည်</option>
+                                                {filterGroup && locationData[filterGroup].map(v => <option key={v} value={v}>{v}</option>)}
+                                            </select>
+                                        </div>
+                                    </div>
+                                    
+                                    <div className="overflow-x-auto flex-1">
+                                        {filteredRecords.length === 0 ? (
+                                            <div className="flex flex-col items-center justify-center h-full min-h-[300px] text-gray-400">
+                                                <i className="fas fa-folder-open text-5xl mb-4 opacity-30"></i><p>မှတ်တမ်း မရှိသေးပါ။</p>
+                                            </div>
+                                        ) : (
+                                            <table className="w-full text-left border-collapse min-w-[500px]">
+                                                <thead className="bg-gray-100/50 text-gray-600 text-sm">
+                                                    <tr>
+                                                        <th className="p-3 font-medium border-b w-16">Date</th>
+                                                        <th className="p-3 font-medium border-b">Name</th>
+                                                        <th className="p-3 font-medium border-b">Village</th>
+                                                        <th className="p-3 font-medium border-b text-right">Amount</th>
+                                                        <th className="p-3 font-medium border-b text-center">Action</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-gray-100 text-sm">
+                                                    {filteredRecords.map(record => (
+                                                        <tr key={record.id} className={`hover:bg-blue-50/30 transition ${editingId === record.id ? 'bg-orange-50' : ''}`}>
+                                                            <td className="p-3 text-gray-500 whitespace-nowrap">{record.date}</td>
+                                                            <td className="p-3 font-medium text-gray-900">{record.contributorName}</td>
+                                                            <td className="p-3 text-gray-700">{record.village}</td>
+                                                            <td className="p-3 text-right font-bold text-green-600 whitespace-nowrap">RM {parseFloat(record.amount).toLocaleString()}</td>
+                                                            <td className="p-3">
+                                                                <div className="flex items-center justify-center space-x-2">
+                                                                    <button onClick={() => setViewingRecord(record)} className="p-1.5 text-blue-500 hover:bg-blue-100 rounded-md" title="အသေးစိတ်ကြည့်ရန်"><i className="fas fa-eye"></i></button>
+                                                                    {appRole === 'admin' && (
+                                                                        <>
+                                                                            <button onClick={() => handleEdit(record)} className="p-1.5 text-orange-500 hover:bg-orange-100 rounded-md" title="ပြင်ဆင်ရန်"><i className="fas fa-edit"></i></button>
+                                                                            <button onClick={() => { if(window.confirm("ဖျက်ရန် သေချာပါသလား?")) db.collection('income_records').doc(record.id).delete(); }} className="p-1.5 text-red-500 hover:bg-red-100 rounded-md" title="ဖျက်ရန်"><i className="fas fa-trash-alt"></i></button>
+                                                                        </>
+                                                                    )}
+                                                                </div>
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {showPassModal && (
+                        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+                            <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden">
+                                <div className="bg-orange-500 p-4 flex justify-between items-center text-white">
+                                    <h3 className="font-semibold text-lg flex items-center"><i className="fas fa-key mr-2"></i> စကားဝှက် ပြောင်းရန်</h3>
+                                    <button onClick={() => setShowPassModal(false)} className="text-white hover:text-gray-200"><i className="fas fa-times text-xl"></i></button>
+                                </div>
+                                <form onSubmit={handleSavePasswords} className="p-6 space-y-4">
+                                    {passChangeSuccess && <div className="bg-green-50 text-green-700 p-3 rounded-lg text-sm border border-green-200">ပြောင်းလဲပြီးပါပြီ။</div>}
+                                    <div className="space-y-1">
+                                        <label className="text-sm font-medium text-gray-700">Admin စကားဝှက် အသစ်</label>
+                                        <input type="text" value={newAdminPass} onChange={(e) => setNewAdminPass(e.target.value)} className="w-full p-2.5 border border-gray-300 rounded-lg outline-none" required />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <label className="text-sm font-medium text-gray-700">User စကားဝှက် အသစ်</label>
+                                        <input type="text" value={newUserPass} onChange={(e) => setNewUserPass(e.target.value)} className="w-full p-2.5 border border-gray-300 rounded-lg outline-none" required />
+                                    </div>
+                                    <div className="pt-2 flex justify-end space-x-2">
+                                        <button type="button" onClick={() => setShowPassModal(false)} className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg">ပိတ်မည်</button>
+                                        <button type="submit" className="px-4 py-2 bg-orange-500 text-white rounded-lg">သိမ်းမည်</button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    )}
+
+                    {viewingRecord && (
+                        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+                            <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
+                                <div className="bg-blue-600 p-4 flex justify-between items-center text-white">
+                                    <h3 className="font-semibold flex items-center"><i className="fas fa-file-invoice mr-2"></i> အသေးစိတ်</h3>
+                                    <button onClick={() => setViewingRecord(null)} className="text-white hover:text-gray-200"><i className="fas fa-times text-xl"></i></button>
+                                </div>
+                                <div className="p-6 space-y-3">
+                                    <div className="flex items-start"><i className="fas fa-user text-gray-400 mt-1 mr-3 w-4"></i><div><div className="text-xs text-gray-500">အမည်</div><div className="text-gray-900 font-medium">{viewingRecord.contributorName}</div></div></div>
+                                    <div className="flex items-start"><i className="fas fa-dollar-sign text-gray-400 mt-1 mr-3 w-4"></i><div><div className="text-xs text-gray-500">ထည့်ဝင်ငွေ</div><div className="text-green-600 font-bold text-lg">RM {parseFloat(viewingRecord.amount).toLocaleString()}</div></div></div>
+                                    <div className="h-px bg-gray-100 my-2"></div>
+                                    <div className="flex items-start"><i className="fas fa-layer-group text-gray-400 mt-1 mr-3 w-4"></i><div><div className="text-xs text-gray-500">Zone (အုပ်စု)</div><div className="text-gray-900 font-medium">{viewingRecord.group}</div></div></div>
+                                    <div className="flex items-start"><i className="fas fa-map-marker-alt text-gray-400 mt-1 mr-3 w-4"></i><div><div className="text-xs text-gray-500">Village (ကျေးရွာ)</div><div className="text-gray-900 font-medium">{viewingRecord.village}</div></div></div>
+                                    <div className="flex items-start"><i className="fas fa-phone text-gray-400 mt-1 mr-3 w-4"></i><div><div className="text-xs text-gray-500">ဖုန်းနံပါတ်</div><div className="text-gray-900 font-medium">{viewingRecord.phone || '-'}</div></div></div>
+                                    <div className="flex items-start"><i className="fas fa-comment-dots text-gray-400 mt-1 mr-3 w-4"></i><div><div className="text-xs text-gray-500">အကြောင်းရင်း</div><div className="text-gray-900 font-medium">{viewingRecord.reason || '-'}</div></div></div>
+                                    <div className="flex items-start"><i className="fas fa-hand-holding-usd text-gray-400 mt-1 mr-3 w-4"></i><div><div className="text-xs text-gray-500">လက်ခံသူ</div><div className="text-gray-900 font-medium">{viewingRecord.receiverName || '-'}</div></div></div>
+                                </div>
+                                <div className="p-4 bg-gray-50 border-t text-right">
+                                    <button onClick={() => setViewingRecord(null)} className="px-5 py-2 bg-gray-200 text-gray-800 rounded-lg font-medium">ပိတ်မည်</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
