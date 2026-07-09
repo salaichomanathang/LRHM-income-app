@@ -46,7 +46,6 @@
         }
         const db = firebase.firestore();
 
-        // ဤနေရာတွင် ကန့်သာရုံ ရွာအမည်ကို ထပ်တိုးထားပါသည်
         const locationData = {
             "Kantthayung (ကန့်သာရုံ)": [
                 "Kantthayung (ကန့်သာရုံ)", "Solong(ဆော်လောင်း)", "Yelongpang (ရယ်လောင်းပန်း)", "Kanlong (ကန်းလောင်း)", "Paikon (ပါကွင်း)", "Lungmong (လုန်မောင်)", "6 Miles (၆မိုင်)"
@@ -69,6 +68,7 @@
             const [appRole, setAppRole] = useState(null); 
             const [loginPasscode, setLoginPasscode] = useState('');
             const [loginError, setLoginError] = useState('');
+            const [showLoginPassword, setShowLoginPassword] = useState(false); // မျက်လုံးခလုတ်အတွက် အသစ်ထည့်ထားသည်
             
             const [appPasswords, setAppPasswords] = useState({ admin: 'admin123', user: 'user123' });
             
@@ -235,7 +235,23 @@
                             <h1 className="text-2xl font-bold text-gray-900 mb-2">LRHM ဝင်ငွေစာရင်း APP</h1>
                             <p className="text-gray-500 mb-8 text-sm">လုံခြုံရေးအကောင့်ဝင်ရန် စကားဝှက် ရိုက်ထည့်ပါ</p>
                             <form onSubmit={handleLogin} className="space-y-4">
-                                <input type="password" value={loginPasscode} onChange={(e) => { setLoginPasscode(e.target.value); setLoginError(''); }} placeholder="Password (စကားဝှက်)" className="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-center text-lg tracking-widest"/>
+                                <div className="relative w-full">
+                                    <input 
+                                        type={showLoginPassword ? "text" : "password"} 
+                                        value={loginPasscode} 
+                                        onChange={(e) => { setLoginPasscode(e.target.value); setLoginError(''); }} 
+                                        placeholder="Password (စကားဝှက်)" 
+                                        className="w-full p-3 pr-12 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-center text-lg tracking-widest"
+                                    />
+                                    <button 
+                                        type="button"
+                                        onClick={() => setShowLoginPassword(!showLoginPassword)}
+                                        className="absolute inset-y-0 right-4 flex items-center text-gray-400 hover:text-blue-600 focus:outline-none"
+                                        title={showLoginPassword ? "စကားဝှက်ကို ဖျောက်မည်" : "စကားဝှက်ကို ကြည့်မည်"}
+                                    >
+                                        <i className={`fas ${showLoginPassword ? 'fa-eye-slash' : 'fa-eye'} text-lg`}></i>
+                                    </button>
+                                </div>
                                 {loginError && <div className="text-red-500 text-sm font-medium">{loginError}</div>}
                                 <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 rounded-xl transition shadow-sm">အကောင့်ဝင်မည် (Login)</button>
                             </form>
